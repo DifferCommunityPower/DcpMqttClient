@@ -57,7 +57,7 @@ class DcpCerboCommunicator():
             self.id = idFile.read()
 
         self.dbusservice = DcpDbusClient(self.version)
-        self.auth_header
+        self.auth_header ={}
         self.auth_nr(get_pw_nr())       
         
     def auth_nr(self,password):
