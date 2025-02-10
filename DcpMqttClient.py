@@ -7,7 +7,7 @@ import dbus
 import requests
 import json
 from dbus.mainloop.glib import DBusGMainLoop
-from utils import get_id, get_labels, getVersion
+from utils import get_id, get_labels, getVersion, put_pw_nr, get_pw_nr
 
 
 # import Victron Energy packages
@@ -52,12 +52,21 @@ class DcpCerboCommunicator():
         self.mqttc = mqtt.Client()
         self.mqttc.connect('localhost')
         self.version = getVersion()
+        self.flow_api_url = "http://localhost:1880/"
         with open("/data/venus/unique-id",'r') as idFile:
             self.id = idFile.read()
 
-        self.dbusservice = DcpDbusClient(self.version)        
+        self.dbusservice = DcpDbusClient(self.version)
+        self.auth_header
+        self.auth_nr(get_pw_nr())       
         
-    
+    def auth_nr(self,password):
+        auth_data = {"client_id":"node-red-admin", "grant_type":"password", "scope":"*", "username":"admin", "password":password}
+        url = self.flow_api_url + "auth/token"
+        auth_r = requests.post(url=url,json=auth_data)
+        r_dict = json.loads(auth_r.json())
+        token = r_dict["access_token"]
+        self.auth_header = {'Authorization': f'Bearer {token}'}
 
     def subscribeMqtt(self):
         
@@ -80,14 +89,16 @@ class DcpCerboCommunicator():
         
         if subtopiclist[0] == 'nodered':
             self.nodered(subtopiclist,reference_id,msg)
+        elif subtopiclist[0] == 'password':
+            self.pw_manager(subtopiclist,reference_id,msg)
+            
     
     def nodered(self,subtopiclist,reference_id,flow_url= None):
         log.debug('pinging the nodered api')
 
         path = "/".join(subtopiclist[2:])
         subtopic = "/".join(subtopiclist)
-        flow_api_url = "http://localhost:1880/"
-        url = flow_api_url + path
+        url = self.flow_api_url + path
 
         if flow_url:
             blob_r = requests.get(flow_url)
@@ -96,11 +107,11 @@ class DcpCerboCommunicator():
         if len(subtopiclist) > 3: #finds the correct local id of the flow for the request if a flow is specified
             if subtopiclist[3]  != "state":
                 label = subtopiclist[3]
-                url = flow_api_url + "flows"
-                r = requests.get(url)
-                flows = json.loads(r.text)
+                url = self.flow_api_url + "flows"
+                flows_r = requests.get(url,headers=self.auth_header)
+                flows = json.loads(flows_r.text)
                 id = get_id(flows,label)
-                url = f'{flow_api_url}/flow/{id}'
+                url = f'{self.flow_api_url}/flow/{id}'
 
 
 
@@ -108,7 +119,7 @@ class DcpCerboCommunicator():
             log.debug(f'posting to nodered api on {url}')
             log.debug(f'payload : {blob_r.json()}')
             
-            r = requests.post(url, json=blob_r.json())
+            r = requests.post(url, headers=self.auth_header,json=blob_r.json())
             if r.status_code == 200:
                 status = "done"
                 self.dbusservice.post(f'/{subtopic}/{reference_id}/{status}',r.json())
@@ -121,7 +132,7 @@ class DcpCerboCommunicator():
             log.debug(f'payload : {blob_r.json()}')
 
             try:
-                r = requests.put(url, json=blob_r.json())
+                r = requests.put(url,header=self.auth_header ,json=blob_r.json())
                 if r.status_code == 200:
                     status = "done"
                     self.dbusservice.post(f'/{subtopic}/{reference_id}/{status}',r.text)
@@ -135,7 +146,7 @@ class DcpCerboCommunicator():
 
         elif subtopiclist[1] == 'delete':
             try:
-                r = requests.delete(url=url)
+                r = requests.delete(url=url,headers=self.auth_header)
                 if r.status_code == 200:
                     status = "done"
                     self.dbusservice.post(f'/{subtopic}/{reference_id}/{status}',r.text)
@@ -149,7 +160,7 @@ class DcpCerboCommunicator():
         
         elif subtopiclist[1] == 'get':
             try:
-                r= requests.get(url)
+                r= requests.get(url,headers=self.auth_header)
                 if r.status_code == 200:
                     response = r.text
                     if subtopiclist[2] == 'flows':
@@ -165,6 +176,15 @@ class DcpCerboCommunicator():
             except requests.exceptions.RequestException as e:
                 status = "error"
                 self.dbusservice.post(f'/{subtopic}/{reference_id}/{status}', f'Error connecting to node red api:{str(e)}')
+    
+    def pw_manager(self,subtopiclist,reference_id,password = None):
+        subtopic = "/".join(subtopiclist)
+        if subtopiclist[1] == "put" and subtopiclist[2] == 'nodered':
+            put_pw_nr(password)
+            status = "done"
+            self.dbusservice.post(f'/{subtopic}/{reference_id}/{status}')
+
+
             
             
 
@@ -183,7 +203,8 @@ if __name__ == "__main__":
     log.info("Connecting to dbus and mqtt")
     comm = DcpCerboCommunicator()
     DBusGMainLoop(set_as_default=True)
-    GLib.timeout_add(1000000, comm.cleandbus)
+    GLib.timeout_add_seconds(86400, comm.cleandbus)
+    GLib.timeout_add_seconds(86400, comm.auth_nr)
 
     #The GLib mainloop gives space for sending messages on the dbus
     mainloop = GLib.MainLoop()

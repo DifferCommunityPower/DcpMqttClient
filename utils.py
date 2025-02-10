@@ -1,4 +1,5 @@
 import os
+import subprocess
 
 def get_id(flows,label):
     for node in flows:
@@ -22,4 +23,15 @@ def getVersion() -> str:
     with open(filename) as f:
         return f.read().replace('\n','')
 
-     
+def put_pw_nr(password):
+    with open('/data/conf/dcppassword.txt','w') as f:
+        f.write(password)
+    r = subprocess.run("node-red admin hash-pw",input=password,shell=True,capture_output=True,text=True)
+    hash = r.stdout.split()[1]
+    with open('/data/conf/vncpassword.txt','w') as f:
+        f.write(hash)
+    subprocess.run('killall node-red')
+
+def get_pw_nr():
+    with open('/data/conf/dcppassword.txt','r') as f:
+        return f.read()
