@@ -64,7 +64,7 @@ class DcpCerboCommunicator():
         auth_data = {"client_id":"node-red-admin", "grant_type":"password", "scope":"*", "username":"admin", "password":password}
         url = self.flow_api_url + "auth/token"
         auth_r = requests.post(url=url,json=auth_data)
-        r_dict = json.loads(auth_r.json())
+        r_dict = auth_r.json()
         token = r_dict["access_token"]
         self.auth_header = {'Authorization': f'Bearer {token}'}
 
@@ -182,7 +182,7 @@ class DcpCerboCommunicator():
         if subtopiclist[1] == "put" and subtopiclist[2] == 'nodered':
             put_pw_nr(password)
             status = "done"
-            self.dbusservice.post(f'/{subtopic}/{reference_id}/{status}')
+            self.dbusservice.post(f'/{subtopic}/{reference_id}/{status}',"Password changed")
 
 
             

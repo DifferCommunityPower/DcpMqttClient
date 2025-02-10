@@ -30,7 +30,7 @@ def put_pw_nr(password):
     hash = r.stdout.split()[1]
     with open('/data/conf/vncpassword.txt','w') as f:
         f.write(hash)
-    subprocess.run('killall node-red')
+    subprocess.run('killall node-red',shell=True)
 
 def get_pw_nr():
     with open('/data/conf/dcppassword.txt','r') as f:
