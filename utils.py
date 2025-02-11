@@ -26,6 +26,7 @@ def getVersion() -> str:
         return f.read().replace('\n','')
 
 def put_pw_nr(password):
+    log.debug(f'Setting Password to {password}')
     with open('/data/conf/dcppassword.txt','w') as f:
         f.write(password)
     r = subprocess.run("node-red admin hash-pw",input=password,shell=True,capture_output=True,text=True)
