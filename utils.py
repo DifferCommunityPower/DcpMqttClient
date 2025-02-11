@@ -1,5 +1,7 @@
 import os
 import subprocess
+import logging
+log = logging.getLogger("__name__")
 
 def get_id(flows,label):
     for node in flows:
@@ -28,6 +30,7 @@ def put_pw_nr(password):
         f.write(password)
     r = subprocess.run("node-red admin hash-pw",input=password,shell=True,capture_output=True,text=True)
     hash = r.stdout.split()[1]
+    log.debug(r)
     with open('/data/conf/vncpassword.txt','w') as f:
         f.write(hash)
     subprocess.run('killall node-red',shell=True)
