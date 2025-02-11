@@ -65,8 +65,11 @@ class DcpCerboCommunicator():
         url = self.flow_api_url + "auth/token"
         auth_r = requests.post(url=url,json=auth_data)
         r_dict = auth_r.json()
-        token = r_dict["access_token"]
-        self.auth_header = {'Authorization': f'Bearer {token}'}
+        try:
+            token = r_dict["access_token"]
+            self.auth_header = {'Authorization': f'Bearer {token}'}
+        except:
+            log.warning(f'Could not get token nr api:{r_dict}')
 
     def subscribeMqtt(self):
         
