@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# setup GLT500 RS485 Depth Sensor
+# setup GLT500 RS485 DcpMqttClient
 
 standardPromptAndActions='yes'
 
