@@ -29,6 +29,7 @@ def put_pw_nr(password):
     log.debug(f'Setting Password to {password}')
     with open('/data/conf/dcppassword.txt','w') as f:
         f.write(password)
+    os.environ["HOME"] = "/home/root"
     r = subprocess.run("node-red admin hash-pw",input=str(password),shell=True,capture_output=True,text=True)
     hash = r.stdout.split()[1]
     log.debug(r)
