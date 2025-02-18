@@ -60,7 +60,10 @@ class DcpCerboCommunicator():
 
         self.dbusservice = DcpDbusClient(self.version)
         self.auth_header ={}
-        self.auth_nr(get_pw_nr())       
+        try:
+            self.auth_nr(get_pw_nr())
+        except:
+            pass
         
     def auth_nr(self,password):
         auth_data = {"client_id":"node-red-admin", "grant_type":"password", "scope":"*", "username":"admin", "password":password}
@@ -194,7 +197,7 @@ class DcpCerboCommunicator():
             while True:
                 e = self.auth_nr(get_pw_nr())
                 if e:
-                    if e.errno == 111 and retry == False:
+                    if e.errno == 111 and not retry:
                         time.sleep(30)
                     else:
                         status = "error"
