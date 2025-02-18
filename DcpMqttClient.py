@@ -70,7 +70,10 @@ class DcpCerboCommunicator():
         url = self.flow_api_url + "auth/token"
         try:
             auth_r = requests.post(url=url,json=auth_data)
-            r_dict = auth_r.json()
+            try:
+                r_dict = auth_r.json()
+            except:
+                log.info(auth_r)
         except requests.exceptions.RequestException as e: 
             return e
         try:
