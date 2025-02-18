@@ -6,8 +6,10 @@ import sys
 import dbus
 import requests
 import json
+import asyncio
 from dbus.mainloop.glib import DBusGMainLoop
 from utils import get_id, get_labels, getVersion, put_pw_nr, get_pw_nr
+
 
 
 # import Victron Energy packages
@@ -186,6 +188,7 @@ class DcpCerboCommunicator():
             put_pw_nr(password)
             self.auth_nr(get_pw_nr())
             status = "done"
+            asyncio.sleep(5)
             self.dbusservice.post(f'/{subtopic}/{reference_id}/{status}',"Password changed")
 
 
