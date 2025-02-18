@@ -186,7 +186,7 @@ class DcpCerboCommunicator():
         subtopic = "/".join(subtopiclist)
         if subtopiclist[1] == "put" and subtopiclist[2] == 'nodered':
             put_pw_nr(password)
-            asyncio.sleep(5)
+            asyncio.sleep(10)
             self.auth_nr(get_pw_nr())
             status = "done"
             self.dbusservice.post(f'/{subtopic}/{reference_id}/{status}',"Password changed")
