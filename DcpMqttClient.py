@@ -65,8 +65,11 @@ class DcpCerboCommunicator():
     def auth_nr(self,password):
         auth_data = {"client_id":"node-red-admin", "grant_type":"password", "scope":"*", "username":"admin", "password":password}
         url = self.flow_api_url + "auth/token"
-        auth_r = requests.post(url=url,json=auth_data)
-        r_dict = auth_r.json()
+        try:
+            auth_r = requests.post(url=url,json=auth_data)
+            r_dict = auth_r.json()
+        except requests.exceptions.RequestException as e: 
+            return e
         try:
             token = r_dict["access_token"]
             self.auth_header = {'Authorization': f'Bearer {token}'}
@@ -183,13 +186,24 @@ class DcpCerboCommunicator():
                 self.dbusservice.post(f'/{subtopic}/{reference_id}/{status}', f'Error connecting to node red api:{str(e)}')
     
     def pw_manager(self,subtopiclist,reference_id,password = None):
+        retry = False
         subtopic = "/".join(subtopiclist)
         if subtopiclist[1] == "put" and subtopiclist[2] == 'nodered':
             put_pw_nr(password)
             time.sleep(10)
-            self.auth_nr(get_pw_nr())
-            status = "done"
-            self.dbusservice.post(f'/{subtopic}/{reference_id}/{status}',"Password changed")
+            while True:
+                e = self.auth_nr(get_pw_nr())
+                if e:
+                    if e.errno == 111 and retry == False:
+                        time.sleep(10)
+                    else:
+                        status = "error"
+                        self.dbusservice.post(f'/{subtopic}/{reference_id}/{status}', f'Error connecting to node red api:{str(e)}')
+                        break
+                else:
+                    status = "done"
+                    self.dbusservice.post(f'/{subtopic}/{reference_id}/{status}',"Password changed")
+                    break
 
 
             
