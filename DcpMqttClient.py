@@ -190,12 +190,12 @@ class DcpCerboCommunicator():
         subtopic = "/".join(subtopiclist)
         if subtopiclist[1] == "put" and subtopiclist[2] == 'nodered':
             put_pw_nr(password)
-            time.sleep(10)
+            time.sleep(30)
             while True:
                 e = self.auth_nr(get_pw_nr())
                 if e:
                     if e.errno == 111 and retry == False:
-                        time.sleep(10)
+                        time.sleep(30)
                     else:
                         status = "error"
                         self.dbusservice.post(f'/{subtopic}/{reference_id}/{status}', f'Error connecting to node red api:{str(e)}')
