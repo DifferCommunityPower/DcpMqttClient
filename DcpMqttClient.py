@@ -146,7 +146,7 @@ class DcpCerboCommunicator():
             log.debug(f'payload : {blob_r.json()}')
 
             try:
-                r = requests.put(url,header=self.auth_header ,json=blob_r.json())
+                r = requests.put(url,headers=self.auth_header ,json=blob_r.json())
                 if r.status_code == 200:
                     status = "done"
                     self.dbusservice.post(f'/{subtopic}/{reference_id}/{status}',r.text)
