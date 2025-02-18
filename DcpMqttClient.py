@@ -161,7 +161,7 @@ class DcpCerboCommunicator():
         elif subtopiclist[1] == 'delete':
             try:
                 r = requests.delete(url=url,headers=self.auth_header)
-                if r.status_code == 200:
+                if r.status_code == 204:
                     status = "done"
                     self.dbusservice.post(f'/{subtopic}/{reference_id}/{status}',r.text)
                     log.debug(f'{subtopic}/done' + r.text)
