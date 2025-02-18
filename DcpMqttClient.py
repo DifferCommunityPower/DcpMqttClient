@@ -125,7 +125,7 @@ class DcpCerboCommunicator():
                 flows_r = requests.get(url,headers=self.auth_header)
                 flows = json.loads(flows_r.text)
                 id = get_id(flows,label)
-                url = f'{self.flow_api_url}/flow/{id}'
+                url = f'{self.flow_api_url}flow/{id}'
 
 
 
