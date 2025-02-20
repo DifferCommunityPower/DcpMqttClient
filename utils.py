@@ -49,7 +49,7 @@ def get_logs_nr():
             lines.append(line)
     log.info(f"Nr logs {lines}")
     for i in range(len(lines)):
-        line = lines[-i]
+        line = lines[-1-i]
         log.info(f"Checking line for error:{line}")
         if line.find("error")!=-1:
             logs.append(line)
