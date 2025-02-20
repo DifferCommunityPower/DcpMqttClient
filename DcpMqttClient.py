@@ -8,7 +8,7 @@ import requests
 import json
 import time
 from dbus.mainloop.glib import DBusGMainLoop
-from utils import get_id, get_labels, getVersion, put_pw_nr, get_pw_nr
+from utils import get_id, get_labels, getVersion, put_pw_nr, get_pw_nr, get_logs_nr
 
 
 
@@ -136,10 +136,11 @@ class DcpCerboCommunicator():
             r = requests.post(url, headers=self.auth_header,json=blob_r.json())
             if r.status_code == 200:
                 status = "done"
-                self.dbusservice.post(f'/{subtopic}/{reference_id}/{status}',r.json())
+                mqtt_response = r.json()
+
             else:
                 status = "error"
-                self.dbusservice.post(f'/{subtopic}/{reference_id}/{status}',f'Error from node red api with code: {r.status_code} content:{r.text}')
+                mqtt_response = f'Error from node red api with code: {r.status_code} content:{r.text}'
             
 
         elif subtopiclist[1] == 'put':
@@ -149,28 +150,28 @@ class DcpCerboCommunicator():
                 r = requests.put(url,headers=self.auth_header ,json=blob_r.json())
                 if r.status_code == 200:
                     status = "done"
-                    self.dbusservice.post(f'/{subtopic}/{reference_id}/{status}',r.text)
+                    mqtt_response=r.text
                     log.debug(f'{subtopic}/done' + r.text)
                 else:
                     status = "error"
-                    self.dbusservice.post(f'/{subtopic}/{reference_id}/{status}',f'Error from node red api with code: {r.status_code} content:{r.text}')
+                    mqtt_response = f'Error from node red api with code: {r.status_code} content:{r.text}'
             except requests.exceptions.RequestException as e:
                 status = "error"
-                self.dbusservice.post(f'/{subtopic}/{reference_id}/{status}', f'Error connecting to node red api:{str(e)}')
+                mqtt_response = f'Error connecting to node red api:{str(e)}'
 
         elif subtopiclist[1] == 'delete':
             try:
                 r = requests.delete(url=url,headers=self.auth_header)
                 if r.status_code == 204:
                     status = "done"
-                    self.dbusservice.post(f'/{subtopic}/{reference_id}/{status}',r.text)
+                    mqtt_response=r.text
                     log.debug(f'{subtopic}/done' + r.text)
                 else:
                     status = "error"
-                    self.dbusservice.post(f'/{subtopic}/{reference_id}/{status}',f'Error from node red api with code: {r.status_code} content:{r.text}')
+                    mqtt_response=f'Error from node red api with code: {r.status_code} content:{r.text}'
             except requests.exceptions.RequestException as e:
                 status = "error"
-                self.dbusservice.post(f'/{subtopic}/{reference_id}/{status}', f'Error connecting to node red api:{str(e)}')
+                mqtt_response=f'Error connecting to node red api:{str(e)}'
         
         elif subtopiclist[1] == 'get':
             try:
@@ -183,13 +184,21 @@ class DcpCerboCommunicator():
 
                     status = "done"
                     log.debug(f'{subtopic}/done' + response)
-                    self.dbusservice.post(f'/{subtopic}/{reference_id}/{status}' ,response)
+                    mqtt_response=response
                 else:
                     status = "error"
-                    self.dbusservice.post(f'/{subtopic}/{reference_id}/{status}',f'Error from node red api with code: {r.status_code} content:{r.text}')
+                    mqtt_response = f'Error from node red api with code: {r.status_code} content:{r.text}'
             except requests.exceptions.RequestException as e:
                 status = "error"
-                self.dbusservice.post(f'/{subtopic}/{reference_id}/{status}', f'Error connecting to node red api:{str(e)}')
+                mqtt_response = f'Error connecting to node red api:{str(e)}'
+
+        logs = get_logs_nr()
+        if len(logs):
+            status = "error"
+            mqtt_response += "There are error logs from node red:"
+            for logentry in logs:
+                mqtt_response += f"{logentry},"
+        self.dbusservice.post(f'/{subtopic}/{reference_id}/{status}',mqtt_response)
     
     def pw_manager(self,subtopiclist,reference_id,password = None):
         retry = False

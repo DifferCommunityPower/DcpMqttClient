@@ -40,3 +40,17 @@ def put_pw_nr(password):
 def get_pw_nr():
     with open('/data/conf/dcppassword.txt','r') as f:
         return f.read()
+
+def get_logs_nr():
+    logs: list[str] = []
+    lines:list[str] = []
+    with open('/data/log/node-red-venus/current','r') as f:
+        for line in f:
+            lines.append(line)
+    for i in range(len(lines)):
+        line = lines[-i]
+        if line.find("error")!=-1:
+            logs.append(line)
+        elif line.find("starting")!=-1:
+            break
+    return logs
