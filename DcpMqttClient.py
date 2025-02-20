@@ -191,7 +191,7 @@ class DcpCerboCommunicator():
             except requests.exceptions.RequestException as e:
                 status = "error"
                 mqtt_response = f'Error connecting to node red api:{str(e)}'
-
+        time.sleep(10)
         logs = get_logs_nr()
         if len(logs):
             status = "error"
