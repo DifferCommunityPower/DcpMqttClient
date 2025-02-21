@@ -47,13 +47,12 @@ def get_logs_nr():
     with open('/data/log/node-red-venus/current','r') as f:
         for line in f:
             lines.append(line)
-    log.info(f"Nr logs {lines}")
     for i in range(len(lines)):
         line = lines[-1-i]
         log.info(f"Checking line for error:{line}")
         if line.find("error")!=-1:
             logs.append(line)
-        elif line.find("starting")!=-1:
+        elif line.find("Starting")!=-1:
             break
     
     return logs
