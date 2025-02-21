@@ -62,9 +62,11 @@ def get_logs_nr():
     with open('/data/log/node-red-venus/current','r') as f:
         for line in f:
             logs.append(line)
+    return logs
 
 def get_logs_dcp():
     logs = []
     with open('/data/log/DcpMqttClient/current','r') as f:
         for line in f:
             logs.append(line)
+    return logs

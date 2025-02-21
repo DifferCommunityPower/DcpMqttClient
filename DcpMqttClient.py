@@ -229,7 +229,7 @@ class DcpCerboCommunicator():
             if subtopiclist [2] == "nodered":
                 mqtt_response = get_logs_nr()
                 status = "done"
-            elif subtopiclist [3] == "dcp":
+            elif subtopiclist [2] == "dcp":
                 mqtt_response = get_logs_dcp()
                 status = "done"
 
