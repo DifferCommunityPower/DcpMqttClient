@@ -41,7 +41,7 @@ def get_pw_nr():
     with open('/data/conf/dcppassword.txt','r') as f:
         return f.read()
 
-def get_logs_nr():
+def get_errors_nr():
     logs: list[str] = []
     lines:list[str] = []
     with open('/data/log/node-red-venus/current','r') as f:
@@ -56,3 +56,15 @@ def get_logs_nr():
             break
     
     return logs
+
+def get_logs_nr():
+    logs = []
+    with open('/data/log/node-red-venus/current','r') as f:
+        for line in f:
+            logs.append(line)
+
+def get_logs_dcp():
+    logs = []
+    with open('/data/log/DcpMqttClient/current','r') as f:
+        for line in f:
+            logs.append(line)

@@ -8,7 +8,7 @@ import requests
 import json
 import time
 from dbus.mainloop.glib import DBusGMainLoop
-from utils import get_id, get_labels, getVersion, put_pw_nr, get_pw_nr, get_logs_nr
+from utils import get_id, get_labels, getVersion, put_pw_nr, get_pw_nr, get_errors_nr,get_logs_nr, get_logs_dcp
 
 
 
@@ -105,11 +105,11 @@ class DcpCerboCommunicator():
             self.nodered(subtopiclist,reference_id,msg)
         elif subtopiclist[0] == 'password':
             self.pw_manager(subtopiclist,reference_id,msg)
+        elif subtopiclist[0] == 'logs':
+            self.logs(subtopiclist,reference_id,msg)
             
     
     def nodered(self,subtopiclist,reference_id,flow_url= None):
-        log.debug('pinging the nodered api')
-
         path = "/".join(subtopiclist[2:])
         subtopic = "/".join(subtopiclist)
         url = self.flow_api_url + path
@@ -127,9 +127,11 @@ class DcpCerboCommunicator():
                 id = get_id(flows,label)
                 url = f'{self.flow_api_url}flow/{id}'
 
+        if len(subtopiclist)<2:
+            status = "error"
+            mqtt_response = "no command given"
 
-
-        if subtopiclist[1] == 'post':
+        elif subtopiclist[1] == 'post':
             log.debug(f'posting to nodered api on {url}')
             log.debug(f'payload : {blob_r.json()}')
             
@@ -151,7 +153,6 @@ class DcpCerboCommunicator():
                 if r.status_code == 200:
                     status = "done"
                     mqtt_response=r.text
-                    log.debug(f'{subtopic}/done' + r.text)
                 else:
                     status = "error"
                     mqtt_response = f'Error from node red api with code: {r.status_code} content:{r.text}'
@@ -165,7 +166,6 @@ class DcpCerboCommunicator():
                 if r.status_code == 204:
                     status = "done"
                     mqtt_response=r.text
-                    log.debug(f'{subtopic}/done' + r.text)
                 else:
                     status = "error"
                     mqtt_response=f'Error from node red api with code: {r.status_code} content:{r.text}'
@@ -183,7 +183,6 @@ class DcpCerboCommunicator():
                         response = json.dumps(get_labels(flows))
 
                     status = "done"
-                    log.debug(f'{subtopic}/done' + response)
                     mqtt_response=response
                 else:
                     status = "error"
@@ -192,13 +191,14 @@ class DcpCerboCommunicator():
                 status = "error"
                 mqtt_response = f'Error connecting to node red api:{str(e)}'
         time.sleep(10)
-        logs = get_logs_nr()
+        logs = get_errors_nr()
         if len(logs):
             status = "error"
             mqtt_response += "There are error logs from node red:"
             for logentry in logs:
                 mqtt_response += f"{logentry},"
         self.dbusservice.post(f'/{subtopic}/{reference_id}/{status}',mqtt_response)
+        log.info(f"Posting back on mqtt, topic:/{subtopic}/{reference_id}/{status} message: {mqtt_response}")
     
     def pw_manager(self,subtopiclist,reference_id,password = None):
         retry = False
@@ -219,6 +219,23 @@ class DcpCerboCommunicator():
                     status = "done"
                     self.dbusservice.post(f'/{subtopic}/{reference_id}/{status}',"Password changed")
                     break
+
+    def logs(self,subtopiclist,reference_id,msg):
+        subtopic = "/".join(subtopiclist)
+        if len(subtopiclist)<3:
+            status = "error"
+            mqtt_response = "Missing commands"
+        elif subtopiclist[1] == "get":
+            if subtopiclist [2] == "nodered":
+                mqtt_response = get_logs_nr()
+                status = "done"
+            elif subtopiclist [3] == "dcp":
+                mqtt_response = get_logs_dcp()
+                status = "done"
+
+        self.dbusservice.post(f'/{subtopic}/{reference_id}/{status}',mqtt_response)
+        log.info(f"Posting back on mqtt, topic:/{subtopic}/{reference_id}/{status} message: {mqtt_response}")
+        
 
 
             
