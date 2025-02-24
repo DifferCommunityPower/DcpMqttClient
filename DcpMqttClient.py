@@ -92,6 +92,7 @@ class DcpCerboCommunicator():
         self.mqttc.on_connect = on_connect
         self.mqttc.on_message = self.on_message
         self.mqttc.subscribe("W/+/dcp/#")
+        self.mqttc.subscribe("N/+/teltonika/#")
         self.mqttc.loop_start()
 
     def on_message(self,client,userdata,msg):
@@ -100,7 +101,15 @@ class DcpCerboCommunicator():
         subtopiclist = topicList[3:-1]
         log.debug(subtopiclist)
         msg = str(msg.payload.decode("utf-8"))
-        
+
+        if topicList[0] == "N":
+            if topicList == "teltonika":
+                self.dbusservice.post(topicList[2:],msg)
+
+        reference_id = topicList[-1]
+        subtopiclist = topicList[3:-1]
+        log.debug(subtopiclist)
+
         if subtopiclist[0] == 'nodered':
             self.nodered(subtopiclist,reference_id,msg)
         elif subtopiclist[0] == 'password':
