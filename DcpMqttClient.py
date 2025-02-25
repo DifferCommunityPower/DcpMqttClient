@@ -76,7 +76,7 @@ class DcpCerboCommunicator:
         self.auth_header = {}
 
         try:
-            self.auth_nr(get_pw_nr())
+            self.auth_nr(get_pw_nr()) #Fails here if there is no password set
         except:
             pass
 
