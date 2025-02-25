@@ -8,13 +8,9 @@ import requests
 import json
 import time
 from dbus.mainloop.glib import DBusGMainLoop
+from NodeRedManager import NrManager
 from utils import (
-    get_id,
-    get_labels,
     getVersion,
-    put_pw_nr,
-    get_pw_nr,
-    get_errors_nr,
     get_logs_nr,
     get_logs_dcp,
 )
@@ -70,40 +66,13 @@ class DcpCerboCommunicator:
         self.mqttc = mqtt.Client()
         self.mqttc.connect("localhost")
         self.version = getVersion()
-        self.flow_api_url = "http://localhost:1880/"
 
         self.dbusservice = DcpDbusClient(self.version)
         self.auth_header = {}
+        self.nr = NrManager()
 
-        try:
-            self.auth_nr(get_pw_nr()) #Fails here if there is no password set
-        except:
-            pass
 
-    def auth_nr(self, password):
-        auth_data = {
-            "client_id": "node-red-admin",
-            "grant_type": "password",
-            "scope": "*",
-            "username": "admin",
-            "password": password,
-        }
-        url = self.flow_api_url + "auth/token"
-        try:
-            auth_r = requests.post(url=url, json=auth_data)
-            try:
-                r_dict = auth_r.json()
-            except:
-                log.info(auth_r)
-        except requests.exceptions.RequestException as e:
-            return e
-        try:
-            token = r_dict["access_token"]
-            self.auth_header = {"Authorization": f"Bearer {token}"}
-        except:
-            log.warning(f"Could not get token nr api:{r_dict}")
-            # Authentication will fail if on boot if no password is set. Should we ask for password from dcp-mqtt?
-
+        
     def subscribeMqtt(self):
         def on_connect(client, userdata, flags, rc):
             if rc == 0:
@@ -118,26 +87,29 @@ class DcpCerboCommunicator:
 
     def on_message(self, client, userdata, msg):
         topicList = msg.topic.split("/")
-        reference_id = topicList[-1]
+        command = topicList[-1]
         subtopiclist = topicList[3:-1]
         log.debug(subtopiclist)
         payload = str(msg.payload.decode("utf-8"))
+        cmd_group = subtopiclist[0]
 
         if topicList[0] == "dcp":
             if topicList[1] == "teltonika":
                 self.dbusservice.post(topicList[1:], payload)
 
-        if subtopiclist[0] == "nodered":
-            self.nodered(subtopiclist, reference_id, payload)
-        elif subtopiclist[0] == "password":
-            self.pw_manager(subtopiclist, reference_id, payload)
-        elif subtopiclist[0] == "logs":
-            self.logs(subtopiclist, reference_id, payload)
-
-    def nodered(self, subtopiclist, reference_id, flow_url=None):
-        path = "/".join(subtopiclist[2:])
+        if cmd_group == "nodered":
+            self.nodered(subtopiclist, command, payload)
+        elif cmd_group == "password":
+            self.pw_manager(subtopiclist, command, payload)
+        elif cmd_group == "logs":
+            self.logs(subtopiclist, command, payload)
         subtopic = "/".join(subtopiclist)
-        url = self.flow_api_url + path
+        self.dbusservice.post(f"/{subtopic}/{command}/{self.status}", self.mqtt_response)
+
+    def nodered(self, subtopiclist, flow_url=None):
+        path = "/".join(subtopiclist[2:])
+        url = self.nr.api_url + path
+        action = subtopiclist[1]
 
         if flow_url:
             blob_r = requests.get(flow_url)
@@ -146,124 +118,95 @@ class DcpCerboCommunicator:
             # finds the correct local id of the flow for the request if a flow is specified
             if subtopiclist[3] != "state":
                 label = subtopiclist[3]
-                url = self.flow_api_url + "flows"
-                flows_r = requests.get(url, headers=self.auth_header)
-                flows = json.loads(flows_r.text)
-                id = get_id(flows, label)
-                url = f"{self.flow_api_url}flow/{id}"
+                id = self.nr.get_id(label)
+                url = f"{self.nr.api_url}flow/{id}"
 
         if len(subtopiclist) < 2:
-            status = "error"
-            mqtt_response = "no command given"
+            self.status = "error"
+            self.mqtt_response = "no command given"
 
-        elif subtopiclist[1] == "post":
+        elif action == "post":
             log.debug(f"posting to nodered api on {url}")
             log.debug(f"payload : {blob_r.json()}")
 
             r = requests.post(url, headers=self.auth_header, json=blob_r.json())
             if r.status_code == 200:
-                status = "done"
-                mqtt_response = r.json()
+                self.status = "done"
+                self.mqtt_response = r.json()
 
             else:
-                status = "error"
-                mqtt_response = f"Error from node red api with code: {r.status_code} content:{r.text}"
+                self.status = "error"
+                self.mqtt_response = f"Error from node red api with code: {r.status_code} content:{r.text}"
 
-        elif subtopiclist[1] == "put":
+        elif action == "put":
             log.debug(f"payload : {blob_r.json()}")
+            r = requests.put(url, headers=self.auth_header, json=blob_r.json())
+            if r.status_code == 200:
+                self.status = "done"
+                self.mqtt_response = r.text
+            else:
+                self.status = "error"
+                self.mqtt_response = f"Error from node red api with code: {r.status_code} content:{r.text}"
+                
+        elif action == "delete":
+            r = requests.delete(url=url, headers=self.auth_header)
+            if r.status_code == 204:
+                self.status = "done"
+                self.mqtt_response = r.text
+            else:
+                self.status = "error"
+                self.mqtt_response = f"Error from node red api with code: {r.status_code} content:{r.text}"
 
-            try:
-                r = requests.put(url, headers=self.auth_header, json=blob_r.json())
-                if r.status_code == 200:
-                    status = "done"
-                    mqtt_response = r.text
-                else:
-                    status = "error"
-                    mqtt_response = f"Error from node red api with code: {r.status_code} content:{r.text}"
-            except requests.exceptions.RequestException as e:
-                status = "error"
-                mqtt_response = f"Error connecting to node red api:{str(e)}"
 
-        elif subtopiclist[1] == "delete":
-            try:
-                r = requests.delete(url=url, headers=self.auth_header)
-                if r.status_code == 204:
-                    status = "done"
-                    mqtt_response = r.text
-                else:
-                    status = "error"
-                    mqtt_response = f"Error from node red api with code: {r.status_code} content:{r.text}"
-            except requests.exceptions.RequestException as e:
-                status = "error"
-                mqtt_response = f"Error connecting to node red api:{str(e)}"
+        elif action == "get":
+            r = requests.get(url, headers=self.auth_header)
+            if r.status_code == 200:
+                response = r.text
+                if subtopiclist[2] == "flows":
+                    flows = json.loads(r.text)
+                    response = json.dumps(self.nr.get_labels(flows))
 
-        elif subtopiclist[1] == "get":
-            try:
-                r = requests.get(url, headers=self.auth_header)
-                if r.status_code == 200:
-                    response = r.text
-                    if subtopiclist[2] == "flows":
-                        flows = json.loads(r.text)
-                        response = json.dumps(get_labels(flows))
-
-                    status = "done"
-                    mqtt_response = response
-                else:
-                    status = "error"
-                    mqtt_response = f"Error from node red api with code: {r.status_code} content:{r.text}"
-            except requests.exceptions.RequestException as e:
-                status = "error"
-                mqtt_response = f"Error connecting to node red api:{str(e)}"
-        # Sleep to wait for nodered restart so we can check for error logs before we respond back
+                self.status = "done"
+                self.mqtt_response = response
+            else:
+                self.status = "error"
+                self.mqtt_response = f"Error from node red api with code: {r.status_code} content:{r.text}"
+        # Sleep to wait for nodered flow to go live so we can check for error logs before we respond back
         time.sleep(10)
-        logs = get_errors_nr()
+        logs = self.nr.get_errors_nr()
         if len(logs):
-            status = "error"
-            mqtt_response += "There are error logs from node red:"
+            self.status = "error"
+            self.mqtt_response += "There are error logs from node red:"
             for logentry in logs:
-                mqtt_response += f"{logentry},"
-        self.dbusservice.post(f"/{subtopic}/{reference_id}/{status}", mqtt_response)
+                self.mqtt_response += f"{logentry},"
+        
 
-    def pw_manager(self, subtopiclist, reference_id, password):
-        retry = False
-        subtopic = "/".join(subtopiclist)
-        if subtopiclist[1] == "put" and subtopiclist[2] == "nodered":
-            put_pw_nr(password)
-            # Sleep for node-red to restart with new password for authentication
-            time.sleep(30)
-            while True:
-                e = self.auth_nr(get_pw_nr())
-                if e:
-                    # We get error 111 if node-red is not done restarting
-                    if e.errno == 111 and not retry:
-                        time.sleep(30)
-                    else:
-                        status = "error"
-                        self.dbusservice.post(
-                            f"/{subtopic}/{reference_id}/{status}",
-                            f"Error connecting to node red api:{str(e)}",
-                        )
-                        break
-                else:
-                    status = "done"
-                    self.dbusservice.post(
-                        f"/{subtopic}/{reference_id}/{status}", "Password changed"
-                    )
-                    break
+    def pw_manager(self, subtopiclist, password):
+        action = subtopiclist[0]
+        if action == "put" and subtopiclist[2] == "nodered":
+            self.nr.put_pw(password)
+            if not self.nr.duplicate_pwd:
+                self.nr.restart()           
+                success = self.nr.auth(self.nr.get_pw_nr())
 
-    def logs(self, subtopiclist, reference_id):
+            if success:
+                self.status = "done"
+                self.mqtt_response = f"Password changed"
+                
+
+    def logs(self, subtopiclist):
         subtopic = "/".join(subtopiclist)
+        action = subtopiclist[0]
         if len(subtopiclist) < 3:
-            status = "error"
-            mqtt_response = "Missing commands"
-        elif subtopiclist[1] == "get":
+            self.status = "error"
+            self.mqtt_response = "Missing commands"
+        elif action == "get":
             if subtopiclist[2] == "nodered":
-                mqtt_response = get_logs_nr()
-                status = "done"
+                self.mqtt_response = get_logs_nr()
+                self.status = "done"
             elif subtopiclist[2] == "dcp":
-                mqtt_response = get_logs_dcp()
-                status = "done"
-        self.dbusservice.post(f"/{subtopic}/{reference_id}/{status}", mqtt_response)
+                self.mqtt_response = get_logs_dcp()
+                self.status = "done"
 
     def cleandbus(self):
         self.dbusservice.dbusservice.__del__()
@@ -276,7 +219,7 @@ if __name__ == "__main__":
     comm = DcpCerboCommunicator()
     DBusGMainLoop(set_as_default=True)
     GLib.timeout_add_seconds(86400, comm.cleandbus)
-    GLib.timeout_add_seconds(86400, comm.auth_nr)
+    GLib.timeout_add_seconds(86400, comm.nr.auth)
 
     # The GLib mainloop gives space for sending messages on the dbus
     mainloop = GLib.MainLoop()
