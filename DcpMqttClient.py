@@ -75,7 +75,10 @@ class DcpCerboCommunicator:
         self.dbusservice = DcpDbusClient(self.version)
         self.auth_header = {}
 
-        self.auth_nr(get_pw_nr())
+        try:
+            self.auth_nr(get_pw_nr())
+        except:
+            pass
 
     def auth_nr(self, password):
         auth_data = {
@@ -122,7 +125,7 @@ class DcpCerboCommunicator:
 
         if topicList[0] == "dcp":
             if topicList[1] == "teltonika":
-                self.dbusservice.post(topicList[2:], payload)
+                self.dbusservice.post(topicList[1:], payload)
 
         if subtopiclist[0] == "nodered":
             self.nodered(subtopiclist, reference_id, payload)
@@ -227,7 +230,7 @@ class DcpCerboCommunicator:
         if subtopiclist[1] == "put" and subtopiclist[2] == "nodered":
             put_pw_nr(password)
             # Sleep for node-red to restart with new password for authentication
-            time.sleep(10)
+            time.sleep(30)
             while True:
                 e = self.auth_nr(get_pw_nr())
                 if e:
