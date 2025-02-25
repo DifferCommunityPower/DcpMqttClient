@@ -8,8 +8,16 @@ import requests
 import json
 import time
 from dbus.mainloop.glib import DBusGMainLoop
-from utils import get_id, get_labels, getVersion, put_pw_nr, get_pw_nr, get_errors_nr,get_logs_nr, get_logs_dcp
-
+from utils import (
+    get_id,
+    get_labels,
+    getVersion,
+    put_pw_nr,
+    get_pw_nr,
+    get_errors_nr,
+    get_logs_nr,
+    get_logs_dcp,
+)
 
 
 # import Victron Energy packages
@@ -17,10 +25,10 @@ sys.path.insert(1, "/data/SetupHelper/velib_python")
 from vedbus import VeDbusService
 
 
-
 class SystemBus(dbus.bus.BusConnection):
     def __new__(cls):
         return dbus.bus.BusConnection.__new__(cls, dbus.bus.BusConnection.TYPE_SYSTEM)
+
 
 def dbusconnection():
     return SystemBus()
@@ -29,38 +37,48 @@ def dbusconnection():
 logging.basicConfig(level=logging.DEBUG)
 log = logging.getLogger("__name__")
 
-class DcpDbusClient():
-    def __init__(self,version):
+
+class DcpDbusClient:
+    def __init__(self, version):
         DBusGMainLoop(set_as_default=True)
-        self.dbusservice = VeDbusService("com.victronenergy.dcp",dbusconnection())
-        self.dbusservice.add_mandatory_paths(processname = 'dcp',processversion = '1.0',
-                                             connection = 'none', productid=1, 
-                                             deviceinstance = '0',productname = 'dcp',
-                                             firmwareversion = version, hardwareversion='0',
-                                             connected ='1')
+        self.dbusservice = VeDbusService("com.victronenergy.dcp", dbusconnection())
+        self.dbusservice.add_mandatory_paths(
+            processname="dcp",
+            processversion="1.0",
+            connection="none",
+            productid=1,
+            deviceinstance="0",
+            productname="dcp",
+            firmwareversion=version,
+            hardwareversion="0",
+            connected="1",
+        )
 
         self.paths = []
 
-    def post(self,path,msg):
+    def post(self, path, msg):
         if path not in self.dbusservice:
             self.dbusservice.add_path(path, 0)
             self.paths.append(path)
-            
-            
-        self.dbusservice[path] = msg
 
-class DcpCerboCommunicator():
+        self.dbusservice[path] = msg
+        log.debug(f"Posted on dbus path:{path} message:{msg}")
+
+
+class DcpCerboCommunicator:
     def __init__(self):
         self.mqttc = mqtt.Client()
-        self.mqttc.connect('localhost')
+        self.mqttc.connect("localhost")
         self.version = getVersion()
         self.flow_api_url = "http://localhost:1880/"
-        with open("/data/venus/unique-id",'r') as idFile:
+        # what is the purpose of this id?
+        with open("/data/venus/unique-id", "r") as idFile:
             self.id = idFile.read()
 
         self.dbusservice = DcpDbusClient(self.version)
-        self.auth_header ={}
+        self.auth_header = {}
         try:
+            # this cannot fail with the current implementation
             self.auth_nr(get_pw_nr())
         except:
             pass
@@ -81,10 +99,10 @@ class DcpCerboCommunicator():
             self.auth_header = {'Authorization': f'Bearer {token}'}
         except:
             log.warning(f'Could not get token nr api:{r_dict}')
+            # should the service start if we cannot connect to node red?
+
 
     def subscribeMqtt(self):
-        
-        
         def on_connect(client, userdata, flags, rc):
             if rc == 0:
                 log.info("Connected to mqtt")
@@ -92,113 +110,110 @@ class DcpCerboCommunicator():
         self.mqttc.on_connect = on_connect
         self.mqttc.on_message = self.on_message
         self.mqttc.subscribe("W/+/dcp/#")
+        # I would put "teltonika" under dcp, so that the topic is W/+/dcp/teltonika/# - its our code, not teltonika's ?
         self.mqttc.subscribe("N/+/teltonika/#")
         self.mqttc.loop_start()
 
-    def on_message(self,client,userdata,msg):
-        topicList = msg.topic.split('/')
+    def on_message(self, client, userdata, msg):
+        topicList = msg.topic.split("/")
         reference_id = topicList[-1]
         subtopiclist = topicList[3:-1]
         log.debug(subtopiclist)
-        msg = str(msg.payload.decode("utf-8"))
+        payload = str(msg.payload.decode("utf-8"))
 
         if topicList[0] == "N":
+            # does this work, isnt topicList a list?
             if topicList == "teltonika":
-                self.dbusservice.post(topicList[2:],msg)
+                self.dbusservice.post(topicList[2:], payload)
 
-        reference_id = topicList[-1]
-        subtopiclist = topicList[3:-1]
-        log.debug(subtopiclist)
+        if subtopiclist[0] == "nodered":
+            self.nodered(subtopiclist, reference_id, payload)
+        elif subtopiclist[0] == "password":
+            self.pw_manager(subtopiclist, reference_id, payload)
+        elif subtopiclist[0] == "logs":
+            self.logs(subtopiclist, reference_id, payload)
 
-        if subtopiclist[0] == 'nodered':
-            self.nodered(subtopiclist,reference_id,msg)
-        elif subtopiclist[0] == 'password':
-            self.pw_manager(subtopiclist,reference_id,msg)
-        elif subtopiclist[0] == 'logs':
-            self.logs(subtopiclist,reference_id,msg)
-            
-    
-    def nodered(self,subtopiclist,reference_id,flow_url= None):
+    def nodered(self, subtopiclist, reference_id, flow_url=None):
         path = "/".join(subtopiclist[2:])
         subtopic = "/".join(subtopiclist)
         url = self.flow_api_url + path
 
         if flow_url:
             blob_r = requests.get(flow_url)
-            
 
-        if len(subtopiclist) > 3: #finds the correct local id of the flow for the request if a flow is specified
-            if subtopiclist[3]  != "state":
+        if len(subtopiclist) > 3:
+            # finds the correct local id of the flow for the request if a flow is specified
+            if subtopiclist[3] != "state":
                 label = subtopiclist[3]
                 url = self.flow_api_url + "flows"
-                flows_r = requests.get(url,headers=self.auth_header)
+                flows_r = requests.get(url, headers=self.auth_header)
                 flows = json.loads(flows_r.text)
-                id = get_id(flows,label)
-                url = f'{self.flow_api_url}flow/{id}'
+                id = get_id(flows, label)
+                url = f"{self.flow_api_url}flow/{id}"
 
-        if len(subtopiclist)<2:
+        if len(subtopiclist) < 2:
             status = "error"
             mqtt_response = "no command given"
 
-        elif subtopiclist[1] == 'post':
-            log.debug(f'posting to nodered api on {url}')
-            log.debug(f'payload : {blob_r.json()}')
-            
-            r = requests.post(url, headers=self.auth_header,json=blob_r.json())
+        elif subtopiclist[1] == "post":
+            log.debug(f"posting to nodered api on {url}")
+            log.debug(f"payload : {blob_r.json()}")
+
+            r = requests.post(url, headers=self.auth_header, json=blob_r.json())
             if r.status_code == 200:
                 status = "done"
                 mqtt_response = r.json()
 
             else:
                 status = "error"
-                mqtt_response = f'Error from node red api with code: {r.status_code} content:{r.text}'
-            
+                mqtt_response = f"Error from node red api with code: {r.status_code} content:{r.text}"
 
-        elif subtopiclist[1] == 'put':
-            log.debug(f'payload : {blob_r.json()}')
+        elif subtopiclist[1] == "put":
+            log.debug(f"payload : {blob_r.json()}")
 
             try:
-                r = requests.put(url,headers=self.auth_header ,json=blob_r.json())
+                r = requests.put(url, headers=self.auth_header, json=blob_r.json())
                 if r.status_code == 200:
                     status = "done"
-                    mqtt_response=r.text
+                    mqtt_response = r.text
                 else:
                     status = "error"
-                    mqtt_response = f'Error from node red api with code: {r.status_code} content:{r.text}'
+                    mqtt_response = f"Error from node red api with code: {r.status_code} content:{r.text}"
             except requests.exceptions.RequestException as e:
                 status = "error"
-                mqtt_response = f'Error connecting to node red api:{str(e)}'
+                mqtt_response = f"Error connecting to node red api:{str(e)}"
 
-        elif subtopiclist[1] == 'delete':
+        elif subtopiclist[1] == "delete":
             try:
-                r = requests.delete(url=url,headers=self.auth_header)
+                r = requests.delete(url=url, headers=self.auth_header)
                 if r.status_code == 204:
                     status = "done"
-                    mqtt_response=r.text
+                    mqtt_response = r.text
                 else:
                     status = "error"
-                    mqtt_response=f'Error from node red api with code: {r.status_code} content:{r.text}'
+                    mqtt_response = f"Error from node red api with code: {r.status_code} content:{r.text}"
             except requests.exceptions.RequestException as e:
                 status = "error"
-                mqtt_response=f'Error connecting to node red api:{str(e)}'
-        
-        elif subtopiclist[1] == 'get':
+                mqtt_response = f"Error connecting to node red api:{str(e)}"
+
+        elif subtopiclist[1] == "get":
             try:
-                r= requests.get(url,headers=self.auth_header)
+                r = requests.get(url, headers=self.auth_header)
                 if r.status_code == 200:
                     response = r.text
-                    if subtopiclist[2] == 'flows':
+                    if subtopiclist[2] == "flows":
                         flows = json.loads(r.text)
                         response = json.dumps(get_labels(flows))
 
                     status = "done"
-                    mqtt_response=response
+                    mqtt_response = response
                 else:
                     status = "error"
-                    mqtt_response = f'Error from node red api with code: {r.status_code} content:{r.text}'
+                    mqtt_response = f"Error from node red api with code: {r.status_code} content:{r.text}"
             except requests.exceptions.RequestException as e:
                 status = "error"
-                mqtt_response = f'Error connecting to node red api:{str(e)}'
+                mqtt_response = f"Error connecting to node red api:{str(e)}"
+        # add a comment - why are we sleeping here?
         time.sleep(10)
         logs = get_errors_nr()
         if len(logs):
@@ -206,61 +221,56 @@ class DcpCerboCommunicator():
             mqtt_response += "There are error logs from node red:"
             for logentry in logs:
                 mqtt_response += f"{logentry},"
-        self.dbusservice.post(f'/{subtopic}/{reference_id}/{status}',mqtt_response)
-        log.info(f"Posting back on mqtt, topic:/{subtopic}/{reference_id}/{status} message: {mqtt_response}")
-    
-    def pw_manager(self,subtopiclist,reference_id,password = None):
+        self.dbusservice.post(f"/{subtopic}/{reference_id}/{status}", mqtt_response)
+
+    def pw_manager(self, subtopiclist, reference_id, password):
         retry = False
         subtopic = "/".join(subtopiclist)
-        if subtopiclist[1] == "put" and subtopiclist[2] == 'nodered':
+        if subtopiclist[1] == "put" and subtopiclist[2] == "nodered":
             put_pw_nr(password)
+            # why are we sleeping here?
             time.sleep(30)
             while True:
                 e = self.auth_nr(get_pw_nr())
                 if e:
+                    # what is 111?
                     if e.errno == 111 and not retry:
+                        # what is the purpose of this sleep?
                         time.sleep(30)
                     else:
                         status = "error"
-                        self.dbusservice.post(f'/{subtopic}/{reference_id}/{status}', f'Error connecting to node red api:{str(e)}')
+                        self.dbusservice.post(
+                            f"/{subtopic}/{reference_id}/{status}",
+                            f"Error connecting to node red api:{str(e)}",
+                        )
                         break
                 else:
                     status = "done"
-                    self.dbusservice.post(f'/{subtopic}/{reference_id}/{status}',"Password changed")
+                    self.dbusservice.post(
+                        f"/{subtopic}/{reference_id}/{status}", "Password changed"
+                    )
                     break
 
-    def logs(self,subtopiclist,reference_id,msg):
+    def logs(self, subtopiclist, reference_id):
         subtopic = "/".join(subtopiclist)
-        if len(subtopiclist)<3:
+        if len(subtopiclist) < 3:
             status = "error"
             mqtt_response = "Missing commands"
         elif subtopiclist[1] == "get":
-            if subtopiclist [2] == "nodered":
+            if subtopiclist[2] == "nodered":
                 mqtt_response = get_logs_nr()
                 status = "done"
-            elif subtopiclist [2] == "dcp":
+            elif subtopiclist[2] == "dcp":
                 mqtt_response = get_logs_dcp()
                 status = "done"
-
-        self.dbusservice.post(f'/{subtopic}/{reference_id}/{status}',mqtt_response)
-        log.info(f"Posting back on mqtt, topic:/{subtopic}/{reference_id}/{status} message: {mqtt_response}")
-        
-
-
-            
-            
+        self.dbusservice.post(f"/{subtopic}/{reference_id}/{status}", mqtt_response)
 
     def cleandbus(self):
         self.dbusservice.dbusservice.__del__()
         self.dbusservice = DcpDbusClient(self.version)
-        return True       
+        return True
 
 
-
-            
-
-
-        
 if __name__ == "__main__":
     log.info("Connecting to dbus and mqtt")
     comm = DcpCerboCommunicator()
@@ -268,10 +278,9 @@ if __name__ == "__main__":
     GLib.timeout_add_seconds(86400, comm.cleandbus)
     GLib.timeout_add_seconds(86400, comm.auth_nr)
 
-    #The GLib mainloop gives space for sending messages on the dbus
+    # The GLib mainloop gives space for sending messages on the dbus
     mainloop = GLib.MainLoop()
-    
-    #In Subscribe Mqtt an event loop is started for listening to mqtt with loop_start this loop runs in a separate thread
+
+    # In Subscribe Mqtt an event loop is started for listening to mqtt with loop_start this loop runs in a separate thread
     comm.subscribeMqtt()
     mainloop.run()
-    
