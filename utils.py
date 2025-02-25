@@ -33,7 +33,8 @@ def put_pw_nr(password):
     log.debug(f"Setting Password to {password}")
     with open("/data/conf/dcppassword.txt", "w") as f:
         f.write(password)
-    # great here with a comment to why we are doing this, setting the env variable to /home/root
+    # Home environment has to be set for node-red admin api
+    # When running as a srvice we have no home environment as default
     os.environ["HOME"] = "/home/root"
     r = subprocess.run(
         "node-red admin hash-pw",

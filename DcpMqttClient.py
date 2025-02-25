@@ -71,36 +71,35 @@ class DcpCerboCommunicator:
         self.mqttc.connect("localhost")
         self.version = getVersion()
         self.flow_api_url = "http://localhost:1880/"
-        # what is the purpose of this id?
-        with open("/data/venus/unique-id", "r") as idFile:
-            self.id = idFile.read()
 
         self.dbusservice = DcpDbusClient(self.version)
         self.auth_header = {}
-        try:
-            # this cannot fail with the current implementation
-            self.auth_nr(get_pw_nr())
-        except:
-            pass
-        
-    def auth_nr(self,password):
-        auth_data = {"client_id":"node-red-admin", "grant_type":"password", "scope":"*", "username":"admin", "password":password}
+
+        self.auth_nr(get_pw_nr())
+
+    def auth_nr(self, password):
+        auth_data = {
+            "client_id": "node-red-admin",
+            "grant_type": "password",
+            "scope": "*",
+            "username": "admin",
+            "password": password,
+        }
         url = self.flow_api_url + "auth/token"
         try:
-            auth_r = requests.post(url=url,json=auth_data)
+            auth_r = requests.post(url=url, json=auth_data)
             try:
                 r_dict = auth_r.json()
             except:
                 log.info(auth_r)
-        except requests.exceptions.RequestException as e: 
+        except requests.exceptions.RequestException as e:
             return e
         try:
             token = r_dict["access_token"]
-            self.auth_header = {'Authorization': f'Bearer {token}'}
+            self.auth_header = {"Authorization": f"Bearer {token}"}
         except:
-            log.warning(f'Could not get token nr api:{r_dict}')
-            # should the service start if we cannot connect to node red?
-
+            log.warning(f"Could not get token nr api:{r_dict}")
+            # Authentication will fail if on boot if no password is set. Should we ask for password from dcp-mqtt?
 
     def subscribeMqtt(self):
         def on_connect(client, userdata, flags, rc):
@@ -110,8 +109,8 @@ class DcpCerboCommunicator:
         self.mqttc.on_connect = on_connect
         self.mqttc.on_message = self.on_message
         self.mqttc.subscribe("W/+/dcp/#")
-        # I would put "teltonika" under dcp, so that the topic is W/+/dcp/teltonika/# - its our code, not teltonika's ?
-        self.mqttc.subscribe("N/+/teltonika/#")
+
+        self.mqttc.subscribe("dcp/teltonika/#")
         self.mqttc.loop_start()
 
     def on_message(self, client, userdata, msg):
@@ -121,9 +120,8 @@ class DcpCerboCommunicator:
         log.debug(subtopiclist)
         payload = str(msg.payload.decode("utf-8"))
 
-        if topicList[0] == "N":
-            # does this work, isnt topicList a list?
-            if topicList == "teltonika":
+        if topicList[0] == "dcp":
+            if topicList[1] == "teltonika":
                 self.dbusservice.post(topicList[2:], payload)
 
         if subtopiclist[0] == "nodered":
@@ -213,7 +211,7 @@ class DcpCerboCommunicator:
             except requests.exceptions.RequestException as e:
                 status = "error"
                 mqtt_response = f"Error connecting to node red api:{str(e)}"
-        # add a comment - why are we sleeping here?
+        # Sleep to wait for nodered restart so we can check for error logs before we respond back
         time.sleep(10)
         logs = get_errors_nr()
         if len(logs):
@@ -228,14 +226,13 @@ class DcpCerboCommunicator:
         subtopic = "/".join(subtopiclist)
         if subtopiclist[1] == "put" and subtopiclist[2] == "nodered":
             put_pw_nr(password)
-            # why are we sleeping here?
-            time.sleep(30)
+            # Sleep for node-red to restart with new password for authentication
+            time.sleep(10)
             while True:
                 e = self.auth_nr(get_pw_nr())
                 if e:
-                    # what is 111?
+                    # We get error 111 if node-red is not done restarting
                     if e.errno == 111 and not retry:
-                        # what is the purpose of this sleep?
                         time.sleep(30)
                     else:
                         status = "error"
