@@ -10,15 +10,16 @@ from utils import _get_logs
 log = logging.getLogger("__name__")
 
 
-class NrManager():
+class NrManager:
     def __init__(self):
         self.api_url = "http://localhost:1880/"
-        self.pwd = self.get_pw_nr()
+        self.pwd = self.get_pw()
         self.duplicate_pwd = False
         if self.pwd:
             self.auth(self.pwd)
         else:
             log.warning("No password set for node-red")
+        self.auth_header = {}
 
     def auth(self, password):
         auth_data = {
@@ -38,7 +39,6 @@ class NrManager():
         else:
             log.warning(f"Could not get token nr api:{r_dict}")
 
-
     def get_id(self, label):
         url = self.api_url + "flows"
         flows_r = requests.get(url, headers=self.auth_header)
@@ -50,16 +50,16 @@ class NrManager():
                 nodelabel = nodelabel.split("-")[0]
             if nodelabel == label:
                 return node.get("id")
-        
-    def get_labels(self,flows):
+
+    def get_labels(self, flows):
         flows_list = []
         for node in flows:
             label = node.get("label")
             if label:
                 flows_list.append(label)
         return flows_list
-    
-    def put_pw(self,password):
+
+    def put_pw(self, password):
         if self.pwd == password:
             self.duplicate_pwd = True
         else:
@@ -83,19 +83,18 @@ class NrManager():
             with open("/data/conf/vncpassword.txt", "w") as f:
                 f.write(hash)
 
-    def restart(self,sleep_after_kill=30):
+    def restart(self, sleep_after_kill=30):
         subprocess.run("killall node-red", shell=True)
         time.sleep(sleep_after_kill)
 
-    def get_pw_nr():
+    def get_pw(self):
         try:
             with open("/data/conf/dcppassword.txt", "r") as f:
                 return f.read()
         except:
             return None
 
-
-    def get_errors_nr():
+    def get_errors(self):
         logs: list[str] = []
         lines = _get_logs("/data/log/node-red-venus/current")
         for line in lines:

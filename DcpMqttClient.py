@@ -1,24 +1,25 @@
 #!/usr/bin/env python
 import paho.mqtt.client as mqtt
-from gi.repository import GLib  # pyright: ignore[reportMissingImports]
+from gi.repository import GLib  # type: ignore
 import logging
 import sys
-import dbus
+import dbus  # type: ignore
 import requests
 import json
 import time
-from dbus.mainloop.glib import DBusGMainLoop
+from dbus.mainloop.glib import DBusGMainLoop  # type: ignore
 from NodeRedManager import NrManager
 from utils import (
     getVersion,
     get_logs_nr,
     get_logs_dcp,
+    valid_topics
 )
 
 
 # import Victron Energy packages
 sys.path.insert(1, "/data/SetupHelper/velib_python")
-from vedbus import VeDbusService
+from vedbus import VeDbusService  # type: ignore
 
 
 class SystemBus(dbus.bus.BusConnection):
@@ -68,11 +69,11 @@ class DcpCerboCommunicator:
         self.version = getVersion()
 
         self.dbusservice = DcpDbusClient(self.version)
-        self.auth_header = {}
         self.nr = NrManager()
 
+        self.status = ""
+        self.mqtt_response = ""
 
-        
     def subscribeMqtt(self):
         def on_connect(client, userdata, flags, rc):
             if rc == 0:
@@ -86,26 +87,35 @@ class DcpCerboCommunicator:
         self.mqttc.loop_start()
 
     def on_message(self, client, userdata, msg):
-        topicList = msg.topic.split("/")
-        command = topicList[-1]
-        subtopiclist = topicList[3:-1]
+        topic_list = msg.topic.split("/")
+        command = topic_list[-1]
+        subtopiclist = topic_list[3:-1]
         log.debug(subtopiclist)
         payload = str(msg.payload.decode("utf-8"))
-        cmd_group = subtopiclist[0]
 
-        if topicList[0] == "dcp":
-            if topicList[1] == "teltonika":
-                self.dbusservice.post(topicList[1:], payload)
+        check_topic = subtopic = "/".join(topic_list[3:6])
+        if topic_list[0] == "dcp":# These topics are for local services wanting to post on to dbus 
+                if topic_list[1] == "teltonika":
+                    self.dbusservice.post(topic_list[1:], payload)
+        else: # This is for requests from dcp-mqtt
+            log.debug("Message from dcp-mqtt")
+            if check_topic in valid_topics.keys():
+                cmd_group = subtopiclist[0]
 
-        if cmd_group == "nodered":
-            self.nodered(subtopiclist, command, payload)
-        elif cmd_group == "password":
-            self.pw_manager(subtopiclist, command, payload)
-        elif cmd_group == "logs":
-            self.logs(subtopiclist, command, payload)
-        subtopic = "/".join(subtopiclist)
-        self.dbusservice.post(f"/{subtopic}/{command}/{self.status}", self.mqtt_response)
-
+                if cmd_group == "nodered":
+                    self.nodered(subtopiclist, payload)
+                elif cmd_group == "password":
+                    self.pw_manager(subtopiclist, payload)
+                elif cmd_group == "logs":
+                    self.logs(subtopiclist, payload)
+                subtopic = "/".join(subtopiclist)
+            else:
+                self.status = "error"
+                self.mqtt_response = "Subtopic not valid"
+            if self.status:
+                self.dbusservice.post(
+                        f"/{subtopic}/{command}/{self.status}", self.mqtt_response
+                    )
     def nodered(self, subtopiclist, flow_url=None):
         path = "/".join(subtopiclist[2:])
         url = self.nr.api_url + path
@@ -129,7 +139,7 @@ class DcpCerboCommunicator:
             log.debug(f"posting to nodered api on {url}")
             log.debug(f"payload : {blob_r.json()}")
 
-            r = requests.post(url, headers=self.auth_header, json=blob_r.json())
+            r = requests.post(url, headers=self.nr.auth_header, json=blob_r.json())
             if r.status_code == 200:
                 self.status = "done"
                 self.mqtt_response = r.json()
@@ -140,16 +150,16 @@ class DcpCerboCommunicator:
 
         elif action == "put":
             log.debug(f"payload : {blob_r.json()}")
-            r = requests.put(url, headers=self.auth_header, json=blob_r.json())
+            r = requests.put(url, headers=self.nr.auth_header, json=blob_r.json())
             if r.status_code == 200:
                 self.status = "done"
                 self.mqtt_response = r.text
             else:
                 self.status = "error"
                 self.mqtt_response = f"Error from node red api with code: {r.status_code} content:{r.text}"
-                
+
         elif action == "delete":
-            r = requests.delete(url=url, headers=self.auth_header)
+            r = requests.delete(url=url, headers=self.nr.auth_header)
             if r.status_code == 204:
                 self.status = "done"
                 self.mqtt_response = r.text
@@ -157,9 +167,8 @@ class DcpCerboCommunicator:
                 self.status = "error"
                 self.mqtt_response = f"Error from node red api with code: {r.status_code} content:{r.text}"
 
-
         elif action == "get":
-            r = requests.get(url, headers=self.auth_header)
+            r = requests.get(url, headers=self.nr.auth_header)
             if r.status_code == 200:
                 response = r.text
                 if subtopiclist[2] == "flows":
@@ -173,29 +182,34 @@ class DcpCerboCommunicator:
                 self.mqtt_response = f"Error from node red api with code: {r.status_code} content:{r.text}"
         # Sleep to wait for nodered flow to go live so we can check for error logs before we respond back
         time.sleep(10)
-        logs = self.nr.get_errors_nr()
+        logs = self.nr.get_errors()
         if len(logs):
             self.status = "error"
             self.mqtt_response += "There are error logs from node red:"
             for logentry in logs:
                 self.mqtt_response += f"{logentry},"
-        
 
     def pw_manager(self, subtopiclist, password):
-        action = subtopiclist[0]
+        log.debug("password manager started")
+        action = subtopiclist[1]
         if action == "put" and subtopiclist[2] == "nodered":
+            log.debug("putting password")
             self.nr.put_pw(password)
             if not self.nr.duplicate_pwd:
-                self.nr.restart()           
-                success = self.nr.auth(self.nr.get_pw_nr())
+                self.nr.restart()
+                success = self.nr.auth(self.nr.get_pw())
+            else:
+                success = True
 
             if success:
                 self.status = "done"
-                self.mqtt_response = f"Password changed"
-                
+                self.mqtt_response = "Password changed"
+                log.debug("Password changed")
+            else:
+                self.status = "error"
+                log.debug("Error changing password")
 
     def logs(self, subtopiclist):
-        subtopic = "/".join(subtopiclist)
         action = subtopiclist[0]
         if len(subtopiclist) < 3:
             self.status = "error"
