@@ -107,7 +107,7 @@ class DcpCerboCommunicator:
                 elif cmd_group == "password":
                     self.pw_manager(subtopiclist, payload)
                 elif cmd_group == "logs":
-                    self.logs(subtopiclist, payload)
+                    self.logs(subtopiclist)
                 subtopic = "/".join(subtopiclist)
             else:
                 self.status = "error"
@@ -210,17 +210,12 @@ class DcpCerboCommunicator:
                 log.debug("Error changing password")
 
     def logs(self, subtopiclist):
-        action = subtopiclist[0]
-        if len(subtopiclist) < 3:
-            self.status = "error"
-            self.mqtt_response = "Missing commands"
-        elif action == "get":
-            if subtopiclist[2] == "nodered":
-                self.mqtt_response = get_logs_nr()
-                self.status = "done"
-            elif subtopiclist[2] == "dcp":
-                self.mqtt_response = get_logs_dcp()
-                self.status = "done"
+        if subtopiclist[2] == "nodered":
+            self.mqtt_response = get_logs_nr()
+            self.status = "done"
+        elif subtopiclist[2] == "dcp":
+            self.mqtt_response = get_logs_dcp()
+            self.status = "done"
 
     def cleandbus(self):
         self.dbusservice.dbusservice.__del__()

@@ -12,14 +12,15 @@ log = logging.getLogger("__name__")
 
 class NrManager:
     def __init__(self):
+        self.auth_header = {}
         self.api_url = "http://localhost:1880/"
         self.pwd = self.get_pw()
         self.duplicate_pwd = False
+
         if self.pwd:
             self.auth(self.pwd)
         else:
             log.warning("No password set for node-red")
-        self.auth_header = {}
 
     def auth(self, password):
         auth_data = {
@@ -43,7 +44,7 @@ class NrManager:
         url = self.api_url + "flows"
         flows_r = requests.get(url, headers=self.auth_header)
         flows = json.loads(flows_r.text)
-        url = f"{self.flow_api_url}flow/{id}"
+        url = f"{self.api_url}flow/{id}"
         for node in flows:
             nodelabel = node.get("label")
             if nodelabel:
