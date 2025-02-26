@@ -99,6 +99,7 @@ class NrManager:
     def get_errors(self):
         logs: list[str] = []
         lines = _get_logs("/data/log/node-red-venus/current")
+        lines.reverse()
         for line in lines:
             log.info(f"Checking line for error:{line}")
             if line.find("error") != -1:
