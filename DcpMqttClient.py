@@ -4,9 +4,6 @@ from gi.repository import GLib  # type: ignore
 import logging
 import sys
 import dbus  # type: ignore
-import requests
-import json
-import time
 from dbus.mainloop.glib import DBusGMainLoop  # type: ignore
 from NodeRedManager import NrManager
 from utils import (
@@ -88,7 +85,7 @@ class DcpCerboCommunicator:
 
     def on_message(self, client, userdata, msg):
         topic_list = msg.topic.split("/")
-        command = topic_list[-1]
+        reference_id = topic_list[-1]
         subtopiclist = topic_list[3:-1]
         log.debug(subtopiclist)
         payload = str(msg.payload.decode("utf-8"))
@@ -103,7 +100,9 @@ class DcpCerboCommunicator:
                 cmd_group = subtopiclist[0]
 
                 if cmd_group == "nodered":
-                    self.nodered(subtopiclist, payload)
+                    self.nr.handle_message(subtopiclist, payload)
+                    self.mqtt_response = self.nr.mqtt_response
+                    self.status=self.nr.status
                 elif cmd_group == "password":
                     self.pw_manager(subtopiclist, payload)
                 elif cmd_group == "logs":
@@ -114,80 +113,9 @@ class DcpCerboCommunicator:
                 self.mqtt_response = "Subtopic not valid"
             if self.status:
                 self.dbusservice.post(
-                        f"/{subtopic}/{command}/{self.status}", self.mqtt_response
+                        f"/{subtopic}/{reference_id}/{self.status}", self.mqtt_response
                     )
-    def nodered(self, subtopiclist, flow_url=None):
-        path = "/".join(subtopiclist[2:])
-        url = self.nr.api_url + path
-        action = subtopiclist[1]
 
-        if flow_url:
-            blob_r = requests.get(flow_url)
-
-        if len(subtopiclist) > 3:
-            # finds the correct local id of the flow for the request if a flow is specified
-            if subtopiclist[3] != "state":
-                label = subtopiclist[3]
-                id = self.nr.get_id(label)
-                url = f"{self.nr.api_url}flow/{id}"
-
-        if len(subtopiclist) < 2:
-            self.status = "error"
-            self.mqtt_response = "no command given"
-
-        elif action == "post":
-            log.debug(f"posting to nodered api on {url}")
-            log.debug(f"payload : {blob_r.json()}")
-
-            r = requests.post(url, headers=self.nr.auth_header, json=blob_r.json())
-            if r.status_code == 200:
-                self.status = "done"
-                self.mqtt_response = r.json()
-
-            else:
-                self.status = "error"
-                self.mqtt_response = f"Error from node red api with code: {r.status_code} content:{r.text}"
-
-        elif action == "put":
-            log.debug(f"payload : {blob_r.json()}")
-            r = requests.put(url, headers=self.nr.auth_header, json=blob_r.json())
-            if r.status_code == 200:
-                self.status = "done"
-                self.mqtt_response = r.text
-            else:
-                self.status = "error"
-                self.mqtt_response = f"Error from node red api with code: {r.status_code} content:{r.text}"
-
-        elif action == "delete":
-            r = requests.delete(url=url, headers=self.nr.auth_header)
-            if r.status_code == 204:
-                self.status = "done"
-                self.mqtt_response = r.text
-            else:
-                self.status = "error"
-                self.mqtt_response = f"Error from node red api with code: {r.status_code} content:{r.text}"
-
-        elif action == "get":
-            r = requests.get(url, headers=self.nr.auth_header)
-            if r.status_code == 200:
-                response = r.text
-                if subtopiclist[2] == "flows":
-                    flows = json.loads(r.text)
-                    response = json.dumps(self.nr.get_labels(flows))
-
-                self.status = "done"
-                self.mqtt_response = response
-            else:
-                self.status = "error"
-                self.mqtt_response = f"Error from node red api with code: {r.status_code} content:{r.text}"
-        # Sleep to wait for nodered flow to go live so we can check for error logs before we respond back
-        time.sleep(10)
-        logs = self.nr.get_errors()
-        if len(logs):
-            self.status = "error"
-            self.mqtt_response += "There are error logs from node red:"
-            for logentry in logs:
-                self.mqtt_response += f"{logentry},"
 
     def pw_manager(self, subtopiclist, password):
         log.debug("password manager started")

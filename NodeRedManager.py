@@ -16,6 +16,7 @@ class NrManager:
         self.api_url = "http://localhost:1880/"
         self.pwd = self.get_pw()
         self.duplicate_pwd = False
+        self.sleep_flow_start = 10
 
         if self.pwd:
             self.auth(self.pwd)
@@ -106,3 +107,71 @@ class NrManager:
                 break
 
         return logs
+    
+    def handle_message(self, subtopiclist, flow_url=None):
+        path = "/".join(subtopiclist[2:])
+        url = self.api_url + path
+        action = subtopiclist[1]
+
+        if flow_url:
+            blob_r = requests.get(flow_url)
+
+        if len(subtopiclist) > 3:         # finds the correct local id of the flow for the request if a flow is specified
+            label = subtopiclist[3]
+            id = self.get_id(label)
+            url = f"{self.api_url}flow/{id}"
+
+        elif action == "post":
+            log.debug(f"posting to nodered api on {url}")
+            log.debug(f"payload : {blob_r.json()}")
+
+            r = requests.post(url, headers=self.auth_header, json=blob_r.json())
+            if r.status_code == 200:
+                self.status = "done"
+                self.mqtt_response = r.json()
+
+            else:
+                self.status = "error"
+                self.mqtt_response = f"Error from node red api with code: {r.status_code} content:{r.text}"
+
+        elif action == "put":
+            log.debug(f"payload : {blob_r.json()}")
+            r = requests.put(url, headers=self.auth_header, json=blob_r.json())
+            if r.status_code == 200:
+                self.status = "done"
+                self.mqtt_response = r.text
+            else:
+                self.status = "error"
+                self.mqtt_response = f"Error from node red api with code: {r.status_code} content:{r.text}"
+
+        elif action == "delete":
+            r = requests.delete(url=url, headers=self.auth_header)
+            if r.status_code == 204:
+                self.status = "done"
+                self.mqtt_response = r.text
+            else:
+                self.status = "error"
+                self.mqtt_response = f"Error from node red api with code: {r.status_code} content:{r.text}"
+
+        elif action == "get":
+            r = requests.get(url, headers=self.auth_header)
+            if r.status_code == 200:
+                response = r.text
+                if subtopiclist[2] == "flows":
+                    flows = json.loads(r.text)
+                    response = json.dumps(self.get_labels(flows))
+
+                self.status = "done"
+                self.mqtt_response = response
+            else:
+                self.status = "error"
+                self.mqtt_response = f"Error from node red api with code: {r.status_code} content:{r.text}"
+        # Sleep to wait for nodered flow to go live so we can check for error logs before we respond back
+        time.sleep(self.sleep_flow_start)
+        logs = self.get_errors()
+        if len(logs):
+            self.status = "error"
+            self.mqtt_response += "There are error logs from node red:"
+            self.mqtt_response += json.dumps(logs)
+        
+        return [self.status,self.mqtt_response]
