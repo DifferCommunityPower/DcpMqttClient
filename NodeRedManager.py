@@ -17,6 +17,8 @@ class NrManager:
         self.pwd = self.get_pw()
         self.duplicate_pwd = False
         self.sleep_flow_start = 10
+        self.status= ""
+        self.mqtt_response = ""
 
         if self.pwd:
             self.auth(self.pwd)
