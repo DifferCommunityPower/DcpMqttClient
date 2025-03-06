@@ -123,8 +123,9 @@ class NrManager:
             label = subtopiclist[3]
             id = self.get_id(label)
             url = f"{self.api_url}flow/{id}"
+        
 
-        elif action == "post":
+        if action == "post":
             log.debug(f"posting to nodered api on {url}")
             log.debug(f"payload : {blob_r.json()}")
 
