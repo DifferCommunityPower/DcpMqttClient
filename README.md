@@ -13,6 +13,8 @@ Currently the main functionality is for accesing the local node-red api installi
 
 Install by adding to SetupHelper (need to be installed first)
 
+After first install it is necessary to set the password for the node-red api for the api to work.
+
 ### Compatibility
 Currently testing with Cerbo GX Mk2, Venus OS version v3.53
 
@@ -29,5 +31,3 @@ svstat /service/DcpMqttClient
 ```
 
 This will output somethink like ```/service/DcpMqttClient: up (pid 5845) 185 seconds```
-
-After first install it is necessary to set the password for the node-red api for the api to work.
