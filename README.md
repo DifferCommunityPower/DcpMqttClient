@@ -29,3 +29,5 @@ svstat /service/DcpMqttClient
 ```
 
 This will output somethink like ```/service/DcpMqttClient: up (pid 5845) 185 seconds```
+
+After first install it is necessary to set the password for the node-red api for the api to work.
