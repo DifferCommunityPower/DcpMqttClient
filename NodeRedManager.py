@@ -132,7 +132,7 @@ class NrManager:
             r = requests.post(url, headers=self.auth_header, json=blob_r.json())
             if r.status_code == 200:
                 self.status = "done"
-                self.mqtt_response = r.json()
+                self.mqtt_response = r.text
 
             else:
                 self.status = "error"
