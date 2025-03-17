@@ -118,6 +118,7 @@ class NrManager:
 
         if flow_url:
             blob_r = requests.get(flow_url)
+            flow_json = self.connect_victron_nodes(blob_r.json())
 
         if len(subtopiclist) > 3:         # finds the correct local id of the flow for the request if a flow is specified
             label = subtopiclist[3]
@@ -127,9 +128,9 @@ class NrManager:
 
         if action == "post":
             log.debug(f"posting to nodered api on {url}")
-            log.debug(f"payload : {blob_r.json()}")
+            log.debug(f"payload : {flow_json}")
 
-            r = requests.post(url, headers=self.auth_header, json=blob_r.json())
+            r = requests.post(url, headers=self.auth_header, json=flow_json)
             if r.status_code == 200:
                 self.status = "done"
                 self.mqtt_response = r.text
@@ -139,8 +140,8 @@ class NrManager:
                 self.mqtt_response = f"Error from node red api with code: {r.status_code} content:{r.text}"
 
         elif action == "put":
-            log.debug(f"payload : {blob_r.json()}")
-            r = requests.put(url, headers=self.auth_header, json=blob_r.json())
+            log.debug(f"payload : {flow_json}")
+            r = requests.put(url, headers=self.auth_header, json=flow_json)
             if r.status_code == 200:
                 self.status = "done"
                 self.mqtt_response = r.text
@@ -179,3 +180,22 @@ class NrManager:
             self.mqtt_response += json.dumps(logs)
         
         return [self.status,self.mqtt_response]
+
+    def connect_victron_nodes(self,flow:dict):
+        nodes:list[dict] = flow['nodes']
+        for node in nodes:
+            node_type:str = node['type']
+            if node_type.count("victron-"):
+                url_type= node_type[8:]
+
+                node_service = requests.get(self.api_url+"victron/services/"+url_type,headers=self.auth_header)
+                node_service_json = node_service.json()[0]
+                node["service"] = node_service_json["service"]
+                node["serviceObj"] = node_service_json
+                node["name"] = node_service_json["name"]
+        
+        return flow
+
+
+
+    
