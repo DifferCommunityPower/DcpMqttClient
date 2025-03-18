@@ -17,7 +17,7 @@ class NrManager:
         self.pwd = self.get_pw()
         self.duplicate_pwd = False
         self.sleep_flow_start = 10
-        self.status= ""
+        self.status = ""
         self.mqtt_response = ""
 
         if self.pwd:
@@ -110,8 +110,10 @@ class NrManager:
                 break
 
         return logs
-    
+
     def handle_message(self, subtopiclist, flow_url=None):
+        self.status = ""
+        self.mqtt_response = ""
         path = "/".join(subtopiclist[2:])
         url = self.api_url + path
         action = subtopiclist[1]
@@ -119,12 +121,17 @@ class NrManager:
         if flow_url:
             blob_r = requests.get(flow_url)
             flow_json = self.connect_victron_nodes(blob_r.json())
+            if (
+                self.status
+            ):  # If error status is set in connect_victron_nodes action is aborted
+                action = ""
 
-        if len(subtopiclist) > 3:         # finds the correct local id of the flow for the request if a flow is specified
+        if (
+            len(subtopiclist) > 3
+        ):  # finds the correct local id of the flow for the request if a flow is specified
             label = subtopiclist[3]
             id = self.get_id(label)
             url = f"{self.api_url}flow/{id}"
-        
 
         if action == "post":
             log.debug(f"posting to nodered api on {url}")
@@ -178,24 +185,43 @@ class NrManager:
             self.status = "error"
             self.mqtt_response += "There are error logs from node red:"
             self.mqtt_response += json.dumps(logs)
-        
-        return [self.status,self.mqtt_response]
 
-    def connect_victron_nodes(self,flow:dict):
-        nodes:list[dict] = flow['nodes']
+        return [self.status, self.mqtt_response]
+
+    def connect_victron_nodes(self, flow: dict):
+        nodes: list[dict] = flow["nodes"]
         for node in nodes:
-            node_type:str = node['type']
+            node_type: str = node["type"]
             if node_type.count("victron-"):
-                url_type= node_type[8:]
+                url_type = node_type[8:]
 
-                node_service = requests.get(self.api_url+"victron/services/"+url_type,headers=self.auth_header)
-                node_service_json = node_service.json()[0]
-                node["service"] = node_service_json["service"]
-                node["serviceObj"] = node_service_json
-                node["name"] = node_service_json["name"]
-        
+                node_service = requests.get(
+                    self.api_url + "victron/services/" + url_type,
+                    headers=self.auth_header,
+                )
+                log.debug(len(node_service.json()))
+                log.debug(node_service.json())
+                if len(node_service.json()) == 1:
+                    node_service_json = node_service.json()[0]
+                    node["service"] = node_service_json["service"]
+                    node["serviceObj"] = {
+                        "service": node_service_json["service"],
+                        "name": node_service_json["name"],
+                    }
+                    paths = node_service_json["paths"]
+                    for path in paths:
+                        if path["path"] == node["path"]:
+                            node["pathObj"] = path
+                    log.debug(flow)
+                elif len(node_service.json()) == 0:
+                    self.status = "error"
+                    self.mqtt_response = (
+                        f"could not find victron device for node {node_type}"
+                    )
+                else:
+                    self.status = "error"
+                    self.mqtt_response = (
+                        f"More than one possible victron device for node {node_type}"
+                    )
+
         return flow
-
-
-
-    
