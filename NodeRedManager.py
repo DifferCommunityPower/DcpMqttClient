@@ -47,13 +47,14 @@ class NrManager:
         url = self.api_url + "flows"
         flows_r = requests.get(url, headers=self.auth_header)
         flows = json.loads(flows_r.text)
-        url = f"{self.api_url}flow/{id}"
         for node in flows:
-            nodelabel = node.get("label")
+            nodelabel:str = node.get("label")
             if nodelabel:
-                nodelabel = nodelabel.split("-")[0]
+                nodelabel_list = nodelabel.split("-")[:-1]
+                nodelabel = "-".join(nodelabel_list)
             if nodelabel == label:
                 return node.get("id")
+        return None
 
     def get_labels(self, flows):
         flows_list = []
@@ -122,7 +123,12 @@ class NrManager:
             if "name" in payload:
                 label = payload["name"]
                 id = self.get_id(label)
-                url = f"{self.api_url}flow/{id}"
+                if id:
+                    url = f"{self.api_url}flow/{id}"
+                    action = "put"
+                else:
+                    action = "post"
+                
             if "url" in payload:
                 blob_r = requests.get(payload["url"])
                 flow_json = self.connect_victron_nodes(blob_r.json())
