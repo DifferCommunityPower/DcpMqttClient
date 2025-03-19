@@ -111,27 +111,23 @@ class NrManager:
 
         return logs
 
-    def handle_message(self, subtopiclist, flow_url=None):
+    def handle_message(self, subtopiclist, payload=None):
         self.status = ""
         self.mqtt_response = ""
         path = "/".join(subtopiclist[2:])
         url = self.api_url + path
         action = subtopiclist[1]
-
-        if flow_url:
-            blob_r = requests.get(flow_url)
-            flow_json = self.connect_victron_nodes(blob_r.json())
-            if (
-                self.status
-            ):  # If error status is set in connect_victron_nodes action is aborted
-                action = ""
-
-        if (
-            len(subtopiclist) > 3
-        ):  # finds the correct local id of the flow for the request if a flow is specified
-            label = subtopiclist[3]
-            id = self.get_id(label)
-            url = f"{self.api_url}flow/{id}"
+        if payload:
+            payload = json.loads(payload)
+            if "name" in payload:
+                label = payload["name"]
+                id = self.get_id(label)
+                url = f"{self.api_url}flow/{id}"
+            if "url" in payload:
+                blob_r = requests.get(payload["url"])
+                flow_json = self.connect_victron_nodes(blob_r.json())
+                if self.status:
+                    action = ""
 
         if action == "post":
             log.debug(f"posting to nodered api on {url}")
