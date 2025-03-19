@@ -203,7 +203,7 @@ class NrManager:
                 )
                 log.debug(len(node_service.json()))
                 log.debug(node_service.json())
-                if len(node_service.json()) == 1:
+                if len(node_service.json()) > 0:
                     node_service_json = node_service.json()[0]
                     node["service"] = node_service_json["service"]
                     node["serviceObj"] = {
@@ -215,15 +215,11 @@ class NrManager:
                         if path["path"] == node["path"]:
                             node["pathObj"] = path
                     log.debug(flow)
-                elif len(node_service.json()) == 0:
+                else:
                     self.status = "error"
                     self.mqtt_response = (
                         f"could not find victron device for node {node_type}"
                     )
-                else:
-                    self.status = "error"
-                    self.mqtt_response = (
-                        f"More than one possible victron device for node {node_type}"
-                    )
+
 
         return flow
