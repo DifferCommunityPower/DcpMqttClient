@@ -125,9 +125,11 @@ class NrManager:
                 id = self.get_id(label)
                 if id:
                     url = f"{self.api_url}flow/{id}"
-                    action = "put"
                 else:
                     action = "post"
+                if url in payload:
+                    action = "put"
+    
                 
             if "url" in payload:
                 blob_r = requests.get(payload["url"])
