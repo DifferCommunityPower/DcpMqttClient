@@ -57,12 +57,22 @@ class NrManager:
         return None
 
     def get_labels(self, flows):
-        flows_list = []
+        flows_id_label_dict:dict[str:str] = {}
         for node in flows:
             label = node.get("label")
             if label:
-                flows_list.append(label)
-        return flows_list
+                id = node.get("id")
+                flows_id_label_dict[id] = label
+        flow_config_dict:dict[str:list] = {}
+        for label in flows_id_label_dict.values():
+            flow_config_dict[label] = []
+        for node in flows:
+            z:str = node.get("z")
+            if z:
+                label:str = flows_id_label_dict[z]
+                flow_config_dict[label].append(node)
+
+        return flow_config_dict
 
     def put_pw(self, password):
         if self.pwd == password:
