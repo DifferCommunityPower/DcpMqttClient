@@ -127,27 +127,25 @@ class NrManager:
         self.mqtt_response = ""
         path = "/".join(subtopiclist[2:])
         url = self.api_url + path
-        action = subtopiclist[1]
-        if payload:
+        self.action = subtopiclist[1]
+        if self.action == "set":
             payload = json.loads(payload)
-            if "name" in payload:
-                label = payload["name"]
-                id = self.get_id(label)
-                if id:
-                    url = f"{self.api_url}flow/{id}"
-                else:
-                    action = "post"
-                if url in payload:
-                    action = "put"
-    
-                
-            if "url" in payload:
-                blob_r = requests.get(payload["url"])
-                flow_json = self.connect_victron_nodes(blob_r.json())
-                if self.status:
-                    action = ""
 
-        if action == "post":
+            label = payload["name"]
+            id = self.get_id(label)
+            if id:
+                url = f"{self.api_url}flow/{id}"
+                self.action = "put"
+            else:
+                self.action = "post"
+                
+            blob_r = requests.get(payload["url"])
+            flow_json = blob_r.json()
+            flow_json = self.connect_victron_nodes(blob_r.json())
+            if self.status:
+                self.action = ""
+
+        if self.action == "post":
             log.debug(f"posting to nodered api on {url}")
             log.debug(f"payload : {flow_json}")
 
@@ -160,7 +158,7 @@ class NrManager:
                 self.status = "error"
                 self.mqtt_response = f"Error from node red api with code: {r.status_code} content:{r.text}"
 
-        elif action == "put":
+        elif self.action == "put":
             log.debug(f"payload : {flow_json}")
             r = requests.put(url, headers=self.auth_header, json=flow_json)
             if r.status_code == 200:
@@ -170,7 +168,7 @@ class NrManager:
                 self.status = "error"
                 self.mqtt_response = f"Error from node red api with code: {r.status_code} content:{r.text}"
 
-        elif action == "delete":
+        elif self.action == "delete":
             r = requests.delete(url=url, headers=self.auth_header)
             if r.status_code == 204:
                 self.status = "done"
@@ -179,7 +177,7 @@ class NrManager:
                 self.status = "error"
                 self.mqtt_response = f"Error from node red api with code: {r.status_code} content:{r.text}"
 
-        elif action == "get":
+        elif self.action == "get":
             r = requests.get(url, headers=self.auth_header)
             if r.status_code == 200:
                 response = r.text
@@ -196,7 +194,6 @@ class NrManager:
         time.sleep(self.sleep_flow_start)
         logs = self.get_errors()
         if len(logs):
-            self.status = "error"
             self.mqtt_response += "There are error logs from node red:"
             self.mqtt_response += json.dumps(logs)
 
