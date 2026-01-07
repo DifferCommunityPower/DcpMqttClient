@@ -9,7 +9,6 @@ valid_topics = {
     "nodered/get/flow": "Get Full Json of a specified flow",
     "nodered/get/flows": "Get name and vesion of all flows",
     "nodered/delete/flow": "Delete Specified flow",
-    "password/put/nodered": "Set password for node-red authentication",
     "logs/get/nodered": "get full current logs from node-red",
     "logs/get/dcp": "get full current logs from DcpMqttClient",
 }

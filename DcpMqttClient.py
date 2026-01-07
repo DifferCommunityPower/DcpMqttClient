@@ -83,8 +83,6 @@ class DcpCerboCommunicator:
         self.mqttc.on_connect = on_connect
         self.mqttc.on_message = self.on_message
         self.mqttc.subscribe("W/+/dcp/#")
-
-        self.mqttc.subscribe("dcp/teltonika/#")
         self.mqttc.loop_start()
 
     def on_message(self, client, userdata, msg):
@@ -95,51 +93,24 @@ class DcpCerboCommunicator:
         payload = str(msg.payload.decode("utf-8"))
 
         check_topic = subtopic = "/".join(topic_list[3:6])
-        if topic_list[0] == "dcp":# These topics are for local services wanting to post on to dbus 
-                if topic_list[1] == "teltonika":
-                    self.dbusservice.post(topic_list[1:], payload)
-        else: # This is for requests from dcp-mqtt
-            log.debug("Message from dcp-mqtt")
-            if check_topic in valid_topics.keys():
-                cmd_group = subtopiclist[0]
+        log.debug("Message from dcp-mqtt")
+        if check_topic in valid_topics.keys():
+            cmd_group = subtopiclist[0]
 
-                if cmd_group == "nodered":
-                    self.nr.handle_message(subtopiclist, payload)
-                    self.mqtt_response = self.nr.mqtt_response
-                    self.status=self.nr.status
-                elif cmd_group == "password":
-                    self.pw_manager(subtopiclist, payload)
-                elif cmd_group == "logs":
-                    self.logs(subtopiclist)
-                subtopic = "/".join(subtopiclist)
-            else:
-                self.status = "error"
-                self.mqtt_response = "Subtopic not valid"
-            if self.status:
-                self.dbusservice.post(
-                        f"/{subtopic}/{reference_id}/{self.status}", self.mqtt_response
-                    )
-
-
-    def pw_manager(self, subtopiclist, password):
-        log.debug("password manager started")
-        action = subtopiclist[1]
-        if action == "put" and subtopiclist[2] == "nodered":
-            log.debug("putting password")
-            self.nr.put_pw(password)
-            if not self.nr.duplicate_pwd:
-                self.nr.restart()
-                success = self.nr.auth(self.nr.get_pw())
-            else:
-                success = True
-
-            if success:
-                self.status = "done"
-                self.mqtt_response = "Password changed"
-                log.debug("Password changed")
-            else:
-                self.status = "error"
-                log.debug("Error changing password")
+            if cmd_group == "nodered":
+                self.nr.handle_message(subtopiclist, payload)
+                self.mqtt_response = self.nr.mqtt_response
+                self.status=self.nr.status
+            elif cmd_group == "logs":
+                self.logs(subtopiclist)
+            subtopic = "/".join(subtopiclist)
+        else:
+            self.status = "error"
+            self.mqtt_response = "Subtopic not valid"
+        if self.status:
+            self.dbusservice.post(
+                    f"/{subtopic}/{reference_id}/{self.status}", self.mqtt_response
+                )
 
     def logs(self, subtopiclist):
         if subtopiclist[2] == "nodered":
