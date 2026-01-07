@@ -61,7 +61,11 @@ class DcpDbusClient:
 
 class DcpCerboCommunicator:
     def __init__(self):
-        self.mqttc = mqtt.Client()
+        try:
+            mqttc = mqtt.Client(mqtt.CallbackAPIVersion.VERSION1)
+        except :
+            mqttc = mqtt.Client()
+            
         self.mqttc.connect("localhost")
         self.version = getVersion()
 
