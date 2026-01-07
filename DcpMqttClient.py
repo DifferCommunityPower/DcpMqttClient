@@ -131,7 +131,6 @@ if __name__ == "__main__":
     comm = DcpCerboCommunicator()
     DBusGMainLoop(set_as_default=True)
     GLib.timeout_add_seconds(86400, comm.cleandbus)
-    GLib.timeout_add_seconds(86400, comm.nr.auth)
 
     # The GLib mainloop gives space for sending messages on the dbus
     mainloop = GLib.MainLoop()
