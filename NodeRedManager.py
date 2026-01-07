@@ -53,7 +53,7 @@ class NrManager:
         lines = _get_logs("/data/log/node-red-venus/current")
         lines.reverse()
         for line in lines:
-            log.info(f"Checking line for error:{line}")
+            log.debug(f"Checking line for error:{line}")
             if line.find("error") != -1:
                 logs.append(line)
             elif line.find("Starting") != -1:
@@ -146,9 +146,7 @@ class NrManager:
                 url_type = node_type[8:]
 
                 node_service = requests.get(
-                    self.api_url + "victron/services/" + url_type,
-                    headers=self.auth_header,
-                )
+                    self.api_url + "victron/services/" + url_type)
                 log.debug(len(node_service.json()))
                 log.debug(node_service.json())
                 if len(node_service.json()) > 0:
